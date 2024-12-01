@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  auth-service:
+    build:
+      context: ..
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_PATH: "/app/config/config.yaml"
+    depends_on:
+      - postgres
+  
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: proj_db_test
+    ports:
+      - "5432:5432"

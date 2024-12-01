@@ -1,0 +1,18 @@
+env: "local"
+log_level: "DEBUG"
+access_token_ttl: 20h
+refresh_token_ttl: 1h
+database:
+  postgres_user: "postgres"
+  postgres_password: "postgres"
+  postgres_hostname: "localhost" 
+  postgres_port: 5433
+  postgres_db_name: "medods"
+  timeout: 2s
+http_server:
+  addr: "127.0.0.1:8080"
+  read_timeout: 1s
+  write_timeout: 1s
+token:
+  access_token_ttl: "1h"
+  refresh_token_ttl: "720h"
