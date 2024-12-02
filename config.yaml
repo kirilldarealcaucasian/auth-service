@@ -6,8 +6,8 @@ database:
   postgres_user: "postgres"
   postgres_password: "postgres"
   postgres_hostname: "localhost" 
-  postgres_port: 5432
-  postgres_db_name: "postgres"
+  postgres_port: 5433
+  postgres_db_name: "medods"
   timeout: 2s
 http_server:
   addr: "127.0.0.1:8080"

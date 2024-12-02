@@ -29,7 +29,6 @@ func (h *AuthHandler) Authenticate(w http.ResponseWriter, r *http.Request) {
 	url := strings.Split(r.URL.String(), "/")
 	guid := url[len(url) - 1]
 	ipAddr := utils.GetUserIp(r)
-
 	authReq := entities.AuthenticateRequest{Guid: guid, IpAddr: ipAddr}
 	tokenPair, err := h.authService.ReleaseTokens(ctx, &authReq)
 
@@ -44,11 +43,13 @@ func (h *AuthHandler) Authenticate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), h.cfg.Database.Timeout)
+	defer cancel()
 	bearerT := r.Header.Get("Authorization")
 
 	if bearerT == "" || !strings.HasPrefix(bearerT, "Bearer ") {
 		utils.WriteResponse(w, 403, "no token in the header")
 		return
-
 	}
+	_, _ = h.authService.RefreshToken(ctx, bearerT)
 }

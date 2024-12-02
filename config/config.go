@@ -41,7 +41,7 @@ type Server struct {
 func MustLoadConfig() *Config {
 	var cfg Config
 
-	config_path := "/home/kirill/auth-service/config.yaml"
+	config_path := "C:\\go\\testovoe_medods\\config.yaml"
 	// err := fetchConfigByPath(&cfg, os.Getenv("CONFIG_PATH"))
 	err := fetchConfigByPath(&cfg, config_path)
 

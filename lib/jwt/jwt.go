@@ -1,8 +1,6 @@
 package jwt
 
 import (
-	"crypto/sha512"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -60,7 +58,7 @@ type Claims interface {
 func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refreshId *int64) (string, error) {
 	const op = "jwt.GenerateToken"
 
-	secret := "abc"
+	secret := []byte("secret")
 	expTime := jwt.NewNumericDate(time.Now().Add(exp))
 	
 	var claims Claims
@@ -71,49 +69,88 @@ func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refre
 		claims = accessTokenClaims(guid, expTime, ipAddr, *refreshId)
 	}
 
-	hash := sha512.New()
-	jsonData, err := json.Marshal(claims)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	_, err = hash.Write(jsonData)
-	if err != nil {
-		return "", err
-	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenStr, err := token.SignedString([]byte(secret))
-    if err != nil {
-        return "", fmt.Errorf("%s: %w", op, err)
-    }
+	tokenStr, err := token.SignedString(secret)
+  if err != nil {
+      return "", fmt.Errorf("\n%s: %w", op, err)
+  }
+
+	t, err := jwt.ParseWithClaims(tokenStr, &RefreshTokenClaims{}, func(token *jwt.Token) (any, error) {
+        return secret, nil
+    })
+	
+	if err != nil {
+		return "", fmt.Errorf("\n%s: %w", op, err)
+	}
+
+	fmt.Printf("CHECKED TOKEN AFTER GENERATION: %+v", &t)
+
 	return tokenStr, nil
 }
 
-
-func DecodeRefreshToken(token string) (*RefreshTokenClaims, error) {
-	const op = "jwt.ValidateRefreshToken"
-
-	claims := RefreshTokenClaims{}
-	
-	tokenStr, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (any, error) {
-		return []byte("AllYourBase"), nil
+func GetToken(claims Claims, tokenStr string) (*jwt.Token, error) {
+	const op = "jwt.GetToken"
+	secret := []byte("secret")
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(tokenStr *jwt.Token) (any, error) {
+		return secret, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("\n%s: %w", op, err)
+	}
+	return token, nil
+}
+
+func DecodeRefreshToken(tokenStr string) (*RefreshTokenClaims, error) {
+	const op = "jwt.DecodeRefreshToken"
+
+	_, err := jwt.ParseWithClaims(tokenStr, &RefreshTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+        return []byte("secret"), nil
+    })
 
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	} else if claims, ok := tokenStr.Claims.(*RefreshTokenClaims); ok {
-		return &RefreshTokenClaims{
-			claims.IsRefresh,
-			claims.IpAddr,
-			jwt.RegisteredClaims{
-				ExpiresAt: claims.ExpiresAt,
-				IssuedAt: claims.IssuedAt,
-				Subject: claims.Subject,
-			},
-		}, nil
-	} else {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("\n %s: %w", op, err)
 	}
+	
+	// claims, ok := jwtToken.Claims.(RefreshTokenClaims) 
+	
+	// if ok && jwtToken.Valid {
+	// 	return &RefreshTokenClaims{
+	// 			claims.IsRefresh,
+	// 			claims.IpAddr,
+	// 			jwt.RegisteredClaims{
+	// 				ExpiresAt: claims.ExpiresAt,
+	// 				IssuedAt: claims.IssuedAt,
+	// 				Subject: claims.Subject,
+	// 			},
+	// 		}, nil
+	// }
+	// return nil, fmt.Errorf("\n%s: %w", op, err)
+	return &RefreshTokenClaims{}, nil
 }
+
+// func DecodeAccessToken(token string) (*AccessTokenClaims, error){
+// 	const op = "jwt.DecodeAccessToken"
+
+// 	var claims AccessTokenClaims
+
+// 	tokenStr, err := GetToken(claims, token)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("\n%s: %w", op, err)
+// 	} else if claims, ok := tokenStr.Claims.(*AccessTokenClaims); ok && tokenStr.Valid {
+// 		return &AccessTokenClaims{
+// 			claims.RefreshId,
+// 			RefreshTokenClaims{
+// 			claims.IsRefresh,
+// 			claims.IpAddr,
+// 			jwt.RegisteredClaims{
+// 				ExpiresAt: claims.ExpiresAt,
+// 				IssuedAt: claims.IssuedAt,
+// 				Subject: claims.Subject,
+// 			},
+// 		},
+// 		}, nil
+// 	} else {
+// 		return nil, fmt.Errorf("\n%s: %w", op, err)
+// 	}
+// }
