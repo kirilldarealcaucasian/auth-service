@@ -16,7 +16,7 @@ var ErrNoUserFound = errors.New("user with provided guid wasn't found")
 
 type AuthService interface {
 	ReleaseTokens(ctx context.Context, authReq *entities.AuthenticateRequest) (*entities.TokenPair, error)
-	RefreshToken(ctx context.Context, user_guid, refresh_token string) *entities.TokenPair
+	RefreshToken(ctx context.Context, user_guid, refresh_token string) (*entities.TokenPair, error)
 }
 
 type userAuthService struct {
@@ -83,7 +83,7 @@ func (as *userAuthService) ReleaseTokens(ctx context.Context, authReq *entities.
 	//generate access token
 	accessT, err := jwt.GenerateToken(authReq.Guid, authReq.IpAddr, as.cfg.Token.RefreshTokenTTL, false, &refreshTID)
 	if err != nil {
-		as.log.Error("failed to generate refresh token", slog.String("error", err.Error()))
+		as.log.Error(op, slog.String("error", err.Error()))
 		return nil, err
 		}
 
@@ -93,6 +93,13 @@ func (as *userAuthService) ReleaseTokens(ctx context.Context, authReq *entities.
 		}, nil
 	}
 
-func (as *userAuthService) RefreshToken(ctx context.Context, user_guid, refresh_token string) *entities.TokenPair {
-	return &entities.TokenPair{}
+func (as *userAuthService) RefreshToken(ctx context.Context, user_guid, refresh_token string) (*entities.TokenPair, error) {
+	const op = "service.RefreshToken"
+	p, err := jwt.DecodeRefreshToken(refresh_token)
+	if err != nil {
+		as.log.Error(op, slog.String("error", err.Error()))
+	}
+		return nil, err
+	fmt.Printf("\nrefresh token payload: %+v", p)
+	return nil, nil
 }

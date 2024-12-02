@@ -44,5 +44,11 @@ func (h *AuthHandler) Authenticate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	bearerT := r.Header.Get("Authorization")
 
+	if bearerT == "" || !strings.HasPrefix(bearerT, "Bearer ") {
+		utils.WriteResponse(w, 403, "no token in the header")
+		return
+
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha512"
 	"encoding/json"
 	"fmt"
-	crypt "testovoe_medods/lib/bcrypt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -61,6 +60,7 @@ type Claims interface {
 func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refreshId *int64) (string, error) {
 	const op = "jwt.GenerateToken"
 
+	secret := "abc"
 	expTime := jwt.NewNumericDate(time.Now().Add(exp))
 	
 	var claims Claims
@@ -82,25 +82,38 @@ func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refre
 		return "", err
 	}
 
-	encodedClaims, err := json.Marshal(claims)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	hashedPayload, err := crypt.EncryptTokenPayload(encodedClaims)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenStr, err := token.SignedString([]byte(hashedPayload))
+	tokenStr, err := token.SignedString([]byte(secret))
     if err != nil {
         return "", fmt.Errorf("%s: %w", op, err)
     }
 	return tokenStr, nil
 }
 
-func ValidateToken(token string) {
+
+func DecodeRefreshToken(token string) (*RefreshTokenClaims, error) {
+	const op = "jwt.ValidateRefreshToken"
+
+	claims := RefreshTokenClaims{}
 	
+	tokenStr, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (any, error) {
+		return []byte("AllYourBase"), nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	} else if claims, ok := tokenStr.Claims.(*RefreshTokenClaims); ok {
+		return &RefreshTokenClaims{
+			claims.IsRefresh,
+			claims.IpAddr,
+			jwt.RegisteredClaims{
+				ExpiresAt: claims.ExpiresAt,
+				IssuedAt: claims.IssuedAt,
+				Subject: claims.Subject,
+			},
+		}, nil
+	} else {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
 }
