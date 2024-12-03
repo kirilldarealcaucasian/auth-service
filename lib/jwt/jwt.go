@@ -1,4 +1,4 @@
-package jwt
+package jwtp
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 )
 
 type RefreshTokenClaims struct {
-	IsRefresh bool
-	IpAddr string
+	IsRefresh bool 
+	IpAddr string  
 	jwt.RegisteredClaims
 }
 
@@ -33,11 +33,11 @@ func accessTokenClaims(guid string, exp *jwt.NumericDate, ipAddr string, refresh
 	}
 }
 
-func refreshTokenClaims(guid string, exp *jwt.NumericDate, ipAddr string) *RefreshTokenClaims {
+func refreshTokenClaims(guid string, exp *jwt.NumericDate, ipAddr string, tokenId int64) *RefreshTokenClaims {
 	return &RefreshTokenClaims{
-			true,
-			ipAddr,
-			jwt.RegisteredClaims{
+			IsRefresh: true,
+			IpAddr: ipAddr,
+			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: exp,
 				IssuedAt: jwt.NewNumericDate(time.Now()),
 				Subject: guid,
@@ -64,7 +64,7 @@ func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refre
 	var claims Claims
 
 	if isRefresh {
-		claims = refreshTokenClaims(guid, expTime, ipAddr)
+		claims = refreshTokenClaims(guid, expTime, ipAddr, *refreshId)
 	} else {
 		claims = accessTokenClaims(guid, expTime, ipAddr, *refreshId)
 	}
@@ -72,85 +72,61 @@ func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refre
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	tokenStr, err := token.SignedString(secret)
+
   if err != nil {
       return "", fmt.Errorf("\n%s: %w", op, err)
   }
-
-	t, err := jwt.ParseWithClaims(tokenStr, &RefreshTokenClaims{}, func(token *jwt.Token) (any, error) {
-        return secret, nil
-    })
-	
-	if err != nil {
-		return "", fmt.Errorf("\n%s: %w", op, err)
-	}
-
-	fmt.Printf("CHECKED TOKEN AFTER GENERATION: %+v", &t)
 
 	return tokenStr, nil
 }
 
 func GetToken(claims Claims, tokenStr string) (*jwt.Token, error) {
 	const op = "jwt.GetToken"
-	secret := []byte("secret")
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(tokenStr *jwt.Token) (any, error) {
-		return secret, nil
+
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
+		return []byte("secret"), nil
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("\n%s: %w", op, err)
 	}
 	return token, nil
 }
 
-func DecodeRefreshToken(tokenStr string) (*RefreshTokenClaims, error) {
-	const op = "jwt.DecodeRefreshToken"
+func GetRefreshTokenClaims(tokenStr string) (*RefreshTokenClaims, error) {
+	const op = "jwt.GetRefreshTokenClaims"
 
-	_, err := jwt.ParseWithClaims(tokenStr, &RefreshTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-        return []byte("secret"), nil
-    })
+	token, err := GetToken(&RefreshTokenClaims{}, tokenStr)
 
 	if err != nil {
-		return nil, fmt.Errorf("\n %s: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	
-	// claims, ok := jwtToken.Claims.(RefreshTokenClaims) 
-	
-	// if ok && jwtToken.Valid {
-	// 	return &RefreshTokenClaims{
-	// 			claims.IsRefresh,
-	// 			claims.IpAddr,
-	// 			jwt.RegisteredClaims{
-	// 				ExpiresAt: claims.ExpiresAt,
-	// 				IssuedAt: claims.IssuedAt,
-	// 				Subject: claims.Subject,
-	// 			},
-	// 		}, nil
-	// }
-	// return nil, fmt.Errorf("\n%s: %w", op, err)
-	return &RefreshTokenClaims{}, nil
+
+	claims, ok := token.Claims.(*RefreshTokenClaims) 
+	if !ok || !token.Valid{
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if claims.ExpiresAt.Time.Before(time.Now())  {
+		return nil, jwt.ErrTokenExpired
+	}
+
+	return claims, nil
 }
 
-// func DecodeAccessToken(token string) (*AccessTokenClaims, error){
-// 	const op = "jwt.DecodeAccessToken"
+func GetAccessToken(tokenStr string) (*AccessTokenClaims, error){
+	const op = "jwt.GetAccessToken"
 
-// 	var claims AccessTokenClaims
+	token, err := GetToken(&AccessTokenClaims{}, tokenStr)
 
-// 	tokenStr, err := GetToken(claims, token)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("\n%s: %w", op, err)
-// 	} else if claims, ok := tokenStr.Claims.(*AccessTokenClaims); ok && tokenStr.Valid {
-// 		return &AccessTokenClaims{
-// 			claims.RefreshId,
-// 			RefreshTokenClaims{
-// 			claims.IsRefresh,
-// 			claims.IpAddr,
-// 			jwt.RegisteredClaims{
-// 				ExpiresAt: claims.ExpiresAt,
-// 				IssuedAt: claims.IssuedAt,
-// 				Subject: claims.Subject,
-// 			},
-// 		},
-// 		}, nil
-// 	} else {
-// 		return nil, fmt.Errorf("\n%s: %w", op, err)
-// 	}
-// }
+	claims, ok := token.Claims.(*AccessTokenClaims) 
+	if !ok || !token.Valid{
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if claims.ExpiresAt.Time.After(time.Now())  {
+		return nil, jwt.ErrTokenExpired
+	}
+
+	return claims, nil
+}

@@ -18,6 +18,8 @@ type AuthRepository interface {
 	GetAuthInfo(ctx context.Context, guid string) (*entities.UserWithAuthCreds, error)
 	UpdateAuthInfo(ctx context.Context, data *entities.UserAuthInfo) error
 	CreateAuthInfo(ctx context.Context, data *entities.UserAuthInfo) (int64, error)
+	GetAuthInfoByRefreshTokenHash(ctx context.Context, tHash string) (*entities.UserWithAuthCreds, error)
+	GetRefreshTokenId(ctx context.Context, tHash string) (*int64, error)
 }
 
 type userAuthRepository struct {
@@ -29,7 +31,6 @@ func NewUserAuthRepository(db *sqlx.DB) AuthRepository {
 		Db: db,
 	}
 }
-
 
 func (s *userAuthRepository) StoreAuthData(ctx context.Context, guid, tokenHash string, ip_address net.IP) error {
 	const op = "auth.StoreToken"
@@ -72,6 +73,37 @@ func (s *userAuthRepository) GetAuthInfo(ctx context.Context, guid string) (*ent
 	return &authInfo, nil
 }
 
+func(s *userAuthRepository)  GetAuthInfoByRefreshTokenHash(ctx context.Context, tHash string) (*entities.UserWithAuthCreds, error) {
+	const op = "repo.GetAuthInfoByRefreshTokenHash"
+	q := "SELECT users.id, email, refresh_token_hash, ip_address FROM users LEFT JOIN users_auth_info ON users.id = users_auth_info.user_guid WHERE refresh_token_hash = $1"
+	var authInfo entities.UserWithAuthCreds
+	err := s.Db.GetContext(ctx, &authInfo, q, tHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrEntityNotExists
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &authInfo, nil
+}
+
+func (s *userAuthRepository) GetRefreshTokenId(ctx context.Context, tHash string) (*int64, error) {
+	const op = "repo.GetRefreshTokenId"
+
+	var tokenId int64 
+	q := "SELECT id FROM users_auth_info WHERE refresh_token_hash = $1"
+
+	err := s.Db.GetContext(ctx, &tokenId, q, tHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrEntityNotExists
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &tokenId, nil
+}
+
 func (s *userAuthRepository) UpdateAuthInfo(ctx context.Context, data *entities.UserAuthInfo) error {
 	const op = "repo.UpdateAuthInfo"
 	updateQ := `UPDATE users_auth_info SET refresh_token_hash=$1, ip_adrress=$2 WHERE guid=$3;`
@@ -96,6 +128,3 @@ func (s *userAuthRepository) CreateAuthInfo(ctx context.Context, data *entities.
 	
 	return refreshTID, nil
 }
-
-// Проверяю есть ли user. Если да -> то создаю пару токенов не проверяя есть они у него уже 
-// Нужно реализовать 2 способа обновления токенов: если пришел просроченный access token и если пришел refresh_token

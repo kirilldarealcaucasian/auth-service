@@ -9,6 +9,8 @@ import (
 	"testovoe_medods/config"
 	"testovoe_medods/entities"
 	"testovoe_medods/service"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type AuthHandler struct {
@@ -35,8 +37,10 @@ func (h *AuthHandler) Authenticate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrNoUserFound) {
 			utils.WriteResponse(w, 403, err.Error())
+			return
 		}
 		utils.WriteResponse(w, 500, "something went wrong")
+		return
 	}
 
 	utils.WriteJson(w, 200, tokenPair)
@@ -47,9 +51,24 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	bearerT := r.Header.Get("Authorization")
 
-	if bearerT == "" || !strings.HasPrefix(bearerT, "Bearer ") {
-		utils.WriteResponse(w, 403, "no token in the header")
+	bearerSlc := strings.Split(bearerT, " ")
+
+	if len(bearerSlc) != 2 {
+		utils.WriteResponse(w, 403, "incorrect token format")
 		return
 	}
-	_, _ = h.authService.RefreshToken(ctx, bearerT)
+
+	token := bearerSlc[1]
+	
+	tokenPair, err := h.authService.RefreshToken(ctx, token)
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenMalformed) ||  errors.Is(err, jwt.ErrTokenExpired) {
+			utils.WriteResponse(w, 403, err.Error())
+			return
+		}
+		utils.WriteResponse(w, 500, "something went wrong")
+		return
+	}
+	utils.WriteJson(w, 200, tokenPair)
 }
