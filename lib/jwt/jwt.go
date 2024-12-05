@@ -7,42 +7,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type RefreshTokenClaims struct {
-	IsRefresh bool 
-	IpAddr string  
+type CustomTokenClaims struct {
+	IsRefresh bool
+	IpAddr    string
 	jwt.RegisteredClaims
-}
-
-type AccessTokenClaims struct {
-	RefreshId int64
-	RefreshTokenClaims
-}
-
-func accessTokenClaims(guid string, exp *jwt.NumericDate, ipAddr string, refreshId int64) *AccessTokenClaims {
-	return &AccessTokenClaims{
-		refreshId,
-		RefreshTokenClaims{
-			false,
-			ipAddr,
-			jwt.RegisteredClaims{
-				ExpiresAt: exp,
-				IssuedAt: jwt.NewNumericDate(time.Now()),
-				Subject: guid,
-			},
-		},
-	}
-}
-
-func refreshTokenClaims(guid string, exp *jwt.NumericDate, ipAddr string, tokenId int64) *RefreshTokenClaims {
-	return &RefreshTokenClaims{
-			IsRefresh: true,
-			IpAddr: ipAddr,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: exp,
-				IssuedAt: jwt.NewNumericDate(time.Now()),
-				Subject: guid,
-			},
-		}
 }
 
 type Claims interface {
@@ -54,28 +22,56 @@ type Claims interface {
 	GetSubject() (string, error)
 }
 
+func (c *CustomTokenClaims) ValidateTokenClaims(refresh bool) error {
+	if refresh && !c.IsRefresh {
+			return jwt.ErrTokenInvalidClaims
+	} else if !refresh && c.IsRefresh {
+			return jwt.ErrTokenInvalidClaims
+	}
+
+	if c.Subject == "" {
+		return jwt.ErrTokenInvalidSubject
+	}
+
+	if c.ExpiresAt.Time.Before(time.Now()) {
+		return jwt.ErrTokenExpired
+	}
+
+	return nil
+}
+
+func tokenClaims(tokenId string, exp *jwt.NumericDate, ipAddr string, isRefresh bool) Claims {
+	return &CustomTokenClaims{
+		IsRefresh: isRefresh,
+		IpAddr:    ipAddr,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: exp,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Subject:   tokenId,
+		},
+	}
+}
+
 // Generates new jwt token
-func GenerateToken(guid, ipAddr string, exp time.Duration, isRefresh bool, refreshId *int64) (string, error) {
+func GenerateToken(tokenId, ipAddr string, exp time.Duration, isRefresh bool) (string, error) {
 	const op = "jwt.GenerateToken"
 
 	secret := []byte("secret")
 	expTime := jwt.NewNumericDate(time.Now().Add(exp))
-	
 	var claims Claims
 
 	if isRefresh {
-		claims = refreshTokenClaims(guid, expTime, ipAddr, *refreshId)
+		claims = tokenClaims(tokenId, expTime, ipAddr, true)
 	} else {
-		claims = accessTokenClaims(guid, expTime, ipAddr, *refreshId)
+		claims = tokenClaims(tokenId, expTime, ipAddr, false)
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
 	tokenStr, err := token.SignedString(secret)
 
-  if err != nil {
-      return "", fmt.Errorf("\n%s: %w", op, err)
-  }
+	if err != nil {
+		return "", fmt.Errorf("\n%s: %w", op, err)
+	}
 
 	return tokenStr, nil
 }
@@ -93,40 +89,22 @@ func GetToken(claims Claims, tokenStr string) (*jwt.Token, error) {
 	return token, nil
 }
 
-func GetRefreshTokenClaims(tokenStr string) (*RefreshTokenClaims, error) {
-	const op = "jwt.GetRefreshTokenClaims"
+func GetAndValidateTokenClaims(tokenStr string, isRefresh bool) (*CustomTokenClaims, error) {
+	const op = "jwt.GetTokenClaims"
 
-	token, err := GetToken(&RefreshTokenClaims{}, tokenStr)
+	token, err := GetToken(&CustomTokenClaims{}, tokenStr)
 
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	claims, ok := token.Claims.(*RefreshTokenClaims) 
-	if !ok || !token.Valid{
+	claims, ok := token.Claims.(*CustomTokenClaims)
+
+	if !ok || !token.Valid {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if claims.ExpiresAt.Time.Before(time.Now())  {
-		return nil, jwt.ErrTokenExpired
-	}
+	err = claims.ValidateTokenClaims(isRefresh)
 
-	return claims, nil
-}
-
-func GetAccessToken(tokenStr string) (*AccessTokenClaims, error){
-	const op = "jwt.GetAccessToken"
-
-	token, err := GetToken(&AccessTokenClaims{}, tokenStr)
-
-	claims, ok := token.Claims.(*AccessTokenClaims) 
-	if !ok || !token.Valid{
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if claims.ExpiresAt.Time.After(time.Now())  {
-		return nil, jwt.ErrTokenExpired
-	}
-
-	return claims, nil
+	return claims, err
 }

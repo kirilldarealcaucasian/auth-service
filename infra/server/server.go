@@ -45,7 +45,7 @@ func MustRunServer(cfg *config.Config, logger *slog.Logger, mux *http.ServeMux, 
 
 func GracefulShutDown(srv *http.Server, logger *slog.Logger, db *sqlx.DB) {
 	logger.Info("Shutting down the server . . .")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		panic("Failed to shutdown http server")

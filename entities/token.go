@@ -10,6 +10,7 @@ type User struct {
 }
 
 type UserAuthInfo struct {
+	RefreshId        *uuid.UUID `db:"id"`
 	UserGuid         *uuid.UUID `db:"user_guid"`
 	RefreshTokenHash *string `db:"refresh_token_hash"`
 	IpAddress        *string `db:"ip_address"`
@@ -17,7 +18,9 @@ type UserAuthInfo struct {
 
 type UserWithAuthCreds struct {
 	User
-	UserAuthInfo
+	RefreshId        *uuid.UUID `db:"id"`
+	RefreshTokenHash *string `db:"refresh_token_hash"`
+	IpAddress        *string `db:"ip_address"`
 }
 
 type AuthenticateRequest struct {

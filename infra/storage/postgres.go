@@ -18,9 +18,11 @@ func MustStorageInit(cfg *config.Config, logger *slog.Logger) *sqlx.DB {
 	if err != nil {
 		panic(err)
 	}
+
   if err := db.Ping(); err != nil {
       panic(err)
     }
+		
   logger.Info("Successfully connected to db")
 	return db
 }

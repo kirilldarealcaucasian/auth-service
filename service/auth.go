@@ -12,9 +12,11 @@ import (
 	repo "testovoe_medods/repository"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 var ErrNoUserFound = errors.New("user with provided guid wasn't found")
+var ErrInvalidTokenClaims = errors.New("invalid refresh token claims")
 
 type AuthService interface {
 	ReleaseTokens(ctx context.Context, authReq *entities.AuthenticateRequest) (*entities.TokenPair, error)
@@ -40,53 +42,70 @@ func (as *userAuthService) ReleaseTokens(ctx context.Context, authReq *entities.
 	const op = "service.ReleaseTokens"
 	as.log.Info(op, slog.String("msg", "Release tokens"))
 
-
 	//check if user with guid exists
-	authInfo, err := as.repo.GetAuthInfo(ctx, authReq.Guid)
+	authInfo, err := as.repo.GetAuthInfoByUserGuid(ctx, authReq.Guid)
 
 	if errors.Is(err, repo.ErrEntityNotExists) { 
 		return nil, ErrNoUserFound
 	}
 
 	if err != nil {
-		as.log.Info(op, slog.String("error", err.Error()))
+		as.log.Error(op, slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	userGuid, _ := uuid.Parse(authReq.Guid)
+	createData := entities.UserAuthInfo{
+		UserGuid: &userGuid,
+		IpAddress: &authReq.IpAddr,
+	}
+
+	// store user auth info
+	refreshTID, err := as.repo.CreateAuthInfo(ctx, &createData)
+
+	if err != nil {
+		as.log.Error(op, slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	//generate refresh token
-	refreshT, err := jwtp.GenerateToken(authReq.Guid, authReq.IpAddr, as.cfg.Token.RefreshTokenTTL, true, nil)
+	refreshT, err := jwtp.GenerateToken(refreshTID, authReq.IpAddr, as.cfg.Token.RefreshTokenTTL, true)
 
 	if err != nil {
-		as.log.Error(op, slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	//encrypt part of refresh token
-	bcryptHash, err := crypt.TokenBcrypt(refreshT)
-	if err != nil {
-		as.log.Error(op, slog.String("\nfailed to hashify refresh token", err.Error()))
-		return nil, err
-	}
-
-	data := entities.UserAuthInfo{
-		UserGuid: &authInfo.ID,
-		RefreshTokenHash: &bcryptHash,
-		IpAddress: &authReq.IpAddr,
-	}
-
-	// store hashed refresh token & other info
-	refreshTID, err := as.repo.CreateAuthInfo(ctx, &data)
-	if err != nil {
-		as.log.Error(op, slog.String("error", err.Error()))
+		as.log.Info(op, slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
+	// hashify part of token
+	refeshTokenHash ,err := crypt.TokenBcrypt(refreshT)
+
+	if err != nil {
+		as.log.Info(op, slog.String("error", err.Error()))
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	tokenIdToUuuid, err := uuid.Parse(refreshTID)
+
+	if err != nil {
+		as.log.Info(op, slog.String("error", err.Error()))
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	updateData := entities.UserAuthInfo{
+		RefreshId: &tokenIdToUuuid,
+		RefreshTokenHash: &refeshTokenHash,
+	}
+
+	// add token hash to user auth data
+	as.repo.UpdateRefreshTokenHash(ctx, &updateData)
+
 	//generate access token
-	accessT, err := jwtp.GenerateToken(authReq.Guid, authReq.IpAddr, as.cfg.Token.AccessTokenTTL, false, &refreshTID)
+	accessT, err := jwtp.GenerateToken(authInfo.RefreshId.String(), authReq.IpAddr, as.cfg.Token.AccessTokenTTL, false)
+
 	if err != nil {
 		as.log.Error(op, slog.String("error", err.Error()))
 		return nil, err
-		}
+	}
 
 	return &entities.TokenPair{
 		AccessToken: accessT,
@@ -98,37 +117,33 @@ func (as *userAuthService) RefreshToken(ctx context.Context, token string) (*ent
 	const op = "service.RefreshToken"
 	as.log.Info(op, slog.String("msg", "Refreshing tokens"))
 
-	claims, err := jwtp.GetRefreshTokenClaims(token)
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) || errors.Is(err, jwt.ErrTokenMalformed) {
-			return nil, err
+	claims, err := jwtp.GetAndValidateTokenClaims(token, true)
+	
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, jwt.ErrTokenExpired
+	} else if errors.Is(err, jwt.ErrTokenInvalidSubject) || errors.Is(err, jwt.ErrTokenInvalidClaims) {
+		return nil, ErrInvalidTokenClaims
 	}
+
+	if err != nil {
 		as.log.Error(op, slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	
-	tHash, err := crypt.TokenBcrypt(token)
-
-	// crypt.VerifyToken()
+	tokenHash, err := as.repo.GetRefreshTokenHash(ctx, claims.Subject)
 
 	if err != nil {
-		as.log.Error(op, slog.String("\nfailed to hashify refresh token", err.Error()))
-		return nil, fmt.Errorf("%s: %w", op, err)
+		as.log.Error(op, slog.String("error", err.Error()))
+		return nil, err
 	}
 
-	authInfo, err := as.repo.GetAuthInfoByRefreshTokenHash(ctx, tHash)
-
-	if err != nil {
-		as.log.Error(op, slog.String("\nfailed to get auth information by refresh token", err.Error()))
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if claims.IpAddr != *authInfo.IpAddress {
-		as.log.Info("ОТОСЛАТЬ ПИСЬМО НА ПОЧТУ")
+	if isTokenValid := crypt.VerifyToken(token, tokenHash); !isTokenValid {
+		as.log.Error(op, slog.String("err", "token hash and db token hash don't match"))
+		return nil, fmt.Errorf("%s: %s", op, "token hash and db token hash don't match")
 	}
 
 	//generate new refresh token
-	refreshT, err := jwtp.GenerateToken(claims.Subject, *authInfo.IpAddress, as.cfg.Token.RefreshTokenTTL, true, nil)
+	refreshT, err := jwtp.GenerateToken(claims.Subject, claims.IpAddr, as.cfg.Token.RefreshTokenTTL, true)
 
 	if err != nil {
 		as.log.Error(op, slog.String("\nfailed to generate new refresh token", err.Error()))
@@ -142,27 +157,29 @@ func (as *userAuthService) RefreshToken(ctx context.Context, token string) (*ent
 		return nil, fmt.Errorf("\n %s: %w", op, err)
 	}
 
-	updateInfo := entities.UserAuthInfo{
-		UserGuid: authInfo.UserGuid,
-		RefreshTokenHash: &newRefreshTHash,
-		IpAddress: authInfo.IpAddress,
-	}
-
-	err = as.repo.UpdateAuthInfo(ctx, &updateInfo)
+	TokenidToUuid, err := uuid.Parse(claims.Subject)
 
 	if err != nil {
-		as.log.Error(op, slog.String("\nfailed to update authentication data", err.Error()))
+		as.log.Error(op, slog.String("\nfailed to hashify new refresh token", err.Error()))
 		return nil, fmt.Errorf("\n %s: %w", op, err)
 	}
 
-	refreshTokenId, err := as.repo.GetRefreshTokenId(ctx, newRefreshTHash)
+	data := entities.UserAuthInfo{
+		RefreshId: &TokenidToUuid,
+		RefreshTokenHash: &newRefreshTHash,
+	}
+
+	fmt.Printf("DATA: %+v", data)
+
+	err = as.repo.UpdateRefreshTokenHash(ctx, &data)
+
 	if err != nil {
-			as.log.Error(op, slog.String("\nfailed to retrieve token hash", err.Error()))
-			return nil, fmt.Errorf("%s: %w", op, err)
+		as.log.Error(op, slog.String("err", err.Error()))
+		return nil, fmt.Errorf("\n %s: %w", op, err)
 	}
 
 	//generate access token
-	accessT, err := jwtp.GenerateToken(authInfo.UserGuid.String(), *authInfo.IpAddress, as.cfg.Token.AccessTokenTTL, false, refreshTokenId)
+	accessT, err := jwtp.GenerateToken(claims.Subject, claims.IpAddr, as.cfg.Token.AccessTokenTTL, false)
 	if err != nil {
 		as.log.Error(op, slog.String("error", err.Error()))
 		return nil, err
@@ -172,4 +189,4 @@ func (as *userAuthService) RefreshToken(ctx context.Context, token string) (*ent
 		AccessToken: accessT,
 		RefreshToken: refreshT,
 		}, nil
-}
+	}
