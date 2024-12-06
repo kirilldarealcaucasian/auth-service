@@ -3,7 +3,7 @@ services:
     build:
       context: .
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
       SECRET: "wefujrogueru9gr4580"
       CONFIG_PATH: "/app/config.yaml"

@@ -10,7 +10,7 @@ database:
   postgres_db_name: "postgres"
   timeout: 2s
 http_server:
-  addr: "127.0.0.1:8080"
+  addr: "0.0.0.0:8081"
   read_timeout: 1s
   write_timeout: 1s
 token:
