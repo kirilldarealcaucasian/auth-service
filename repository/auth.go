@@ -75,7 +75,7 @@ func (s *userAuthRepository) GetRefreshTokenHash(ctx context.Context, tokenId st
 }
 
 func (s *userAuthRepository) GetAuthInfoByUserGuid(ctx context.Context, guid string) (*entities.UserWithAuthCreds, error) {
-	const op = "repo.GetAuthInfo"
+	const op = "repo.GetAuthInfoByUserGuid"
 
 	q := "SELECT users.id, email, refresh_token_hash, ip_address FROM users LEFT JOIN users_auth_info ON users.id = users_auth_info.user_guid WHERE users.id = $1"
 	var authInfo entities.UserWithAuthCreds
