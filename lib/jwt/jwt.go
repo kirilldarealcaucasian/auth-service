@@ -2,6 +2,7 @@ package jwtp
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -56,7 +57,7 @@ func tokenClaims(tokenId string, exp *jwt.NumericDate, ipAddr string, isRefresh 
 func GenerateToken(tokenId, ipAddr string, exp time.Duration, isRefresh bool) (string, error) {
 	const op = "jwt.GenerateToken"
 
-	secret := []byte("secret")
+	secret := []byte(os.Getenv("SECRET"))
 	expTime := jwt.NewNumericDate(time.Now().Add(exp))
 	var claims Claims
 
@@ -77,10 +78,8 @@ func GenerateToken(tokenId, ipAddr string, exp time.Duration, isRefresh bool) (s
 }
 
 func GetToken(claims Claims, tokenStr string) (*jwt.Token, error) {
-	const op = "jwt.GetToken"
-
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
-		return []byte("secret"), nil
+		return []byte(os.Getenv("SECRET")), nil
 	})
 
 	if err != nil {

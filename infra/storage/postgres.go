@@ -11,6 +11,8 @@ import (
 )
 
 
+
+
 func MustStorageInit(cfg *config.Config, logger *slog.Logger) *sqlx.DB {
 	dsn := fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=disable", cfg.Database.PostgresUser, cfg.Database.PostgresPassword, cfg.Database.PostgresHostname, strconv.Itoa(cfg.Database.PostgresPort), cfg.Database.PostgresDBName)
 	db, err := sqlx.Connect("pgx", dsn)

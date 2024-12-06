@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -41,9 +42,9 @@ type Server struct {
 func MustLoadConfig() *Config {
 	var cfg Config
 
-	config_path := "суда конфиг"
-	// err := fetchConfigByPath(&cfg, os.Getenv("CONFIG_PATH"))
-	err := fetchConfigByPath(&cfg, config_path)
+	// config_path := "/home/kirill/auth-service/config.yaml"
+	err := fetchConfigByPath(&cfg, os.Getenv("CONFIG_PATH"))
+	// err := fetchConfigByPath(&cfg, config_path)
 
 	if err != nil {
 		panic(err)
