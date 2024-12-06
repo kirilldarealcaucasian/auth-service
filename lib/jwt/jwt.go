@@ -84,7 +84,7 @@ func GetToken(claims Claims, tokenStr string) (*jwt.Token, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("\n%s: %w", op, err)
+		return nil, err
 	}
 	return token, nil
 }
@@ -95,7 +95,7 @@ func GetAndValidateTokenClaims(tokenStr string, isRefresh bool) (*CustomTokenCla
 	token, err := GetToken(&CustomTokenClaims{}, tokenStr)
 
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, err
 	}
 
 	claims, ok := token.Claims.(*CustomTokenClaims)

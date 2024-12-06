@@ -63,7 +63,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	tokenPair, err := h.authService.RefreshToken(ctx, token)
 
 	if err != nil {
-		if errors.Is(err, jwt.ErrTokenMalformed) ||  errors.Is(err, jwt.ErrTokenExpired) {
+		if errors.Is(err, jwt.ErrTokenMalformed) ||  errors.Is(err, service.ErrInvalidTokenClaims) {
 			utils.WriteResponse(w, 403, err.Error())
 			return
 		}

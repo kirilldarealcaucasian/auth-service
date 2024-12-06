@@ -121,7 +121,7 @@ func (as *userAuthService) RefreshToken(ctx context.Context, token string) (*ent
 	
 	if errors.Is(err, jwt.ErrTokenExpired) {
 		return nil, jwt.ErrTokenExpired
-	} else if errors.Is(err, jwt.ErrTokenInvalidSubject) || errors.Is(err, jwt.ErrTokenInvalidClaims) {
+	} else if errors.Is(err, jwt.ErrTokenInvalidSubject) || errors.Is(err, jwt.ErrTokenInvalidClaims) || errors.Is(err, jwt.ErrSignatureInvalid) {
 		return nil, ErrInvalidTokenClaims
 	}
 
